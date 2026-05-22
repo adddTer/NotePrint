@@ -1,0 +1,6 @@
+{
+  "name": "学科知识点整理工具",
+  "description": "专为语数英物化生设计的知识点整理工具，首创可视化化学方程式与公式编辑器，完美适配各种复杂化学符号，支持高清排版与A4纸张双栏打印。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
