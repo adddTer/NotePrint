@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 @import "katex/dist/katex.min.css";
+@variant dark (&:is(.dark *));
 
 :root {
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
@@ -12,4 +13,64 @@
 
 .katex .cjk_fallback {
   font-family: ui-sans-serif, system-ui, sans-serif !important;
+}
+
+@media print {
+  html, body, #root {
+    height: auto !important;
+    overflow: visible !important;
+    min-height: 0 !important;
+  }
+}
+
+/* Force clean black-and-white vector style for Mermaid */
+.mermaid-chart svg .node rect, 
+.mermaid-chart svg .node circle, 
+.mermaid-chart svg .node ellipse, 
+.mermaid-chart svg .node polygon, 
+.mermaid-chart svg .node path {
+  fill: #fff !important;
+  stroke: #000 !important;
+  stroke-width: 1px !important;
+}
+
+.mermaid-chart svg .label, 
+.mermaid-chart svg .edgeLabel {
+  color: #000 !important;
+  background-color: transparent !important;
+}
+
+.mermaid-chart svg .edgeLabel rect {
+  fill: #fff !important;
+  opacity: 0.8 !important;
+}
+
+.mermaid-chart svg .edgePath path,
+.mermaid-chart svg .marker {
+  stroke: #000 !important;
+}
+
+.dark .mermaid-chart svg .node rect, 
+.dark .mermaid-chart svg .node circle, 
+.dark .mermaid-chart svg .node ellipse, 
+.dark .mermaid-chart svg .node polygon, 
+.dark .mermaid-chart svg .node path {
+  fill: #1c1917 !important; /* stone-900 */
+  stroke: #d6d3d1 !important; /* stone-300 */
+}
+
+.dark .mermaid-chart svg .label, 
+.dark .mermaid-chart svg .edgeLabel {
+  color: #d6d3d1 !important;
+  fill: #d6d3d1 !important;
+}
+
+.dark .mermaid-chart svg .edgeLabel rect {
+  fill: #1c1917 !important;
+}
+
+.dark .mermaid-chart svg .edgePath path,
+.dark .mermaid-chart svg .marker {
+  stroke: #d6d3d1 !important;
+  fill: #d6d3d1 !important;
 }

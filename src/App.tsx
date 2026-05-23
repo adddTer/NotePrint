@@ -10,6 +10,8 @@ import { DocWorkspace } from './components/DocWorkspace';
 import { PrintPreview } from './components/PrintPreview';
 import { useDialog } from './components/Dialog';
 import { BookOpen } from 'lucide-react';
+import { GlobalCopilot } from '../copilot/project/GlobalCopilot';
+import { ThemeToggle } from './components/ThemeToggle';
 
 function AppLogo() {
   return (
@@ -206,19 +208,77 @@ export default function App() {
   };
 
   // 本地打包备份操作
-  const handleExportData = () => {
+  const handleExportData = async () => {
     try {
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+
+      const getFolderPath = (folderId: string | null): string => {
+        if (!folderId) return '';
+        const folder = folders.find(f => f.id === folderId);
+        if (!folder) return '';
+        const parentPath = getFolderPath(folder.parentId);
+        return parentPath ? `${parentPath}/${folder.name}` : folder.name;
+      };
+
+      sheets.forEach((sheet, idx) => {
+        const path = getFolderPath(sheet.folderId);
+        const prefix = path ? `${path}/` : '';
+        const safeTitle = (sheet.title || '未命名').replace(/[\\/:*?"<>|]/g, '_');
+        const content = `---
+id: ${sheet.id}
+subject: ${sheet.subject}
+title: ${sheet.title}
+tags: ${sheet.tags.join(', ')}
+description: ${sheet.description}
+folderId: ${sheet.folderId || ''}
+---
+
+${sheet.content || ''}`;
+        zip.file(`${prefix}${idx}_${safeTitle}.md`, content);
+      });
+
       const backupObj = { folders, sheets };
-      const dataStr = JSON.stringify(backupObj, null, 2);
-      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-      const exportFileDefaultName = `学霸全科知识整理多级树形备份_${new Date().toISOString().split('T')[0]}.json`;
-      const linkElement = document.createElement('a');
-      linkElement.setAttribute('href', dataUri);
-      linkElement.setAttribute('download', exportFileDefaultName);
-      linkElement.click();
+      zip.file('backup.json', JSON.stringify(backupObj, null, 2));
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `学霸全科知识整理多级树形备份_${new Date().toISOString().split('T')[0]}.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
     } catch (e) {
-      showAlert('导出失败', '导出备份包失败，请检查浏览器权限');
+      console.error(e);
+      showAlert('导出失败', '导出备份包失败，请检查浏览器权限和运行环境');
     }
+  };
+
+  const parseMarkdownFile = (fileName: string, fileContent: string): KnowledgeSheet | null => {
+    const match = fileContent.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+    if (!match) return null;
+    const metaStr = match[1];
+    const content = match[2].trimStart();
+    const meta: Record<string, string> = {};
+    metaStr.split('\n').forEach(line => {
+      const parts = line.split(':');
+      if (parts.length >= 2) {
+        meta[parts[0].trim()] = parts.slice(1).join(':').trim();
+      }
+    });
+
+    if (!meta.id || !meta.subject || !meta.title) return null;
+    return {
+      id: meta.id,
+      subject: meta.subject as SubjectId,
+      title: meta.title,
+      tags: meta.tags ? meta.tags.split(',').map(s => s.trim()).filter(Boolean) : [],
+      description: meta.description || '',
+      content: content,
+      folderId: meta.folderId || null,
+      updatedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString()
+    };
   };
 
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -226,55 +286,100 @@ export default function App() {
     if (!files || files.length === 0) return;
     
     const file = files[0];
+    const extension = file.name.split('.').pop()?.toLowerCase();
     const reader = new FileReader();
     
     reader.onload = async (event) => {
       try {
-        const importContent = JSON.parse(event.target?.result as string);
         let loadedFoldersList: Folder[] = [];
         let loadedSheetsList: KnowledgeSheet[] = [];
 
-        if (Array.isArray(importContent)) {
-          loadedFoldersList = DEFAULT_FOLDERS;
-          loadedSheetsList = importContent;
-        } else if (importContent && typeof importContent === 'object' && Array.isArray(importContent.sheets)) {
-          loadedFoldersList = Array.isArray(importContent.folders) ? importContent.folders : DEFAULT_FOLDERS;
-          loadedSheetsList = importContent.sheets;
+        if (extension === 'zip') {
+          const JSZip = (await import('jszip')).default;
+          const zip = await JSZip.loadAsync(event.target?.result as ArrayBuffer);
+          const backupJsonFile = zip.file('backup.json');
+          if (backupJsonFile) {
+             const backupStr = await backupJsonFile.async('string');
+             const backupObj = JSON.parse(backupStr);
+             loadedFoldersList = backupObj.folders || DEFAULT_FOLDERS;
+             loadedSheetsList = backupObj.sheets || [];
+          } else {
+             // Parse md files (basic recovery without hierarchy support outside frontmatter folderId)
+             loadedFoldersList = folders; 
+             for (const relativePath in zip.files) {
+               if (relativePath.endsWith('.md')) {
+                 const content = await zip.files[relativePath].async('string');
+                 const sheet = parseMarkdownFile(relativePath, content);
+                 if (sheet) {
+                   loadedSheetsList.push(sheet);
+                 }
+               }
+             }
+          }
+        } else if (extension === 'json') {
+          const importContent = JSON.parse(event.target?.result as string);
+          if (Array.isArray(importContent)) {
+            loadedFoldersList = DEFAULT_FOLDERS;
+            loadedSheetsList = importContent;
+          } else if (importContent && typeof importContent === 'object' && Array.isArray(importContent.sheets)) {
+            loadedFoldersList = Array.isArray(importContent.folders) ? importContent.folders : DEFAULT_FOLDERS;
+            loadedSheetsList = importContent.sheets;
+          }
+        } else if (extension === 'md') {
+          const content = event.target?.result as string;
+          const sheet = parseMarkdownFile(file.name, content);
+          loadedFoldersList = folders; // keep existing folders
+          loadedSheetsList = sheets.filter(s => s.id !== sheet?.id);
+          if (sheet) {
+             loadedSheetsList.push(sheet);
+          } else {
+             showAlert('读取失败', '该 Markdown 文件不包含有效的 Frontmatter 元信息，无法识别为文稿。');
+             return;
+          }
         } else {
-          showAlert('读取失败', '备份文件不符合标准格式');
-          return;
+           showAlert('读取失败', '不支持的文件格式。支持 .zip、.json 或 .md。');
+           return;
         }
 
         if (loadedSheetsList.length > 0) {
           const doImport = await showConfirm(
             '确认导入', 
-            `成功读取到 ${loadedFoldersList.length} 个文件夹和 ${loadedSheetsList.length} 个知识讲义文档。这会覆盖当前本地的内容，确认导入吗？`
+            `成功读取到 ${extension === 'md' ? '1个文稿' : (loadedFoldersList.length + ' 个文件夹和 ' + loadedSheetsList.length + ' 个知识讲义文档')}。当前导入可能覆盖并替换同名数据，确认导入吗？`
           );
           if (doImport) {
             persistFolders(loadedFoldersList);
             persistSheets(loadedSheetsList);
             setActiveSheetId(loadedSheetsList[0].id);
-            showAlert('导入成功', '已恢复多级文档体系！');
+            showAlert('导入成功', '已恢复内容！');
           }
         } else {
-          showAlert('提示', '备份中没有可导入的讲义文档');
+          showAlert('读取失败', '未能读取到有效的备份格式数据，操作已取消');
         }
       } catch (err) {
-        showAlert('解析失败', '解析备份失败，请传入正确的知识点整理 JSON 数据包');
+        console.error(err);
+        showAlert('格式错误', '文件解析失败！请检查文件是否损坏。');
       }
     };
-    reader.readAsText(file);
+    
+    if (extension === 'zip') {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
+    // reset input
+    e.target.value = '';
   };
 
   return (
-    <div className="min-h-screen bg-stone-100 flex flex-col text-stone-900 select-none antialiased">
-      <header className="bg-white border-b border-stone-200 shadow-xs shrink-0 relative select-none">
-        <div className="mx-auto px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-stone-100 dark:bg-stone-900 flex flex-col text-stone-900 dark:text-stone-100 select-none antialiased transition-colors print:!block print:!min-h-0 print:!h-auto print:!overflow-visible print:!bg-white">
+      <header className="bg-white dark:bg-stone-950 border-b border-stone-200 dark:border-stone-800 shadow-xs shrink-0 relative select-none print:hidden transition-colors">
+        <div className="mx-auto px-6 py-3 flex items-center justify-between pointer-events-none">
+          <div className="flex items-center gap-3 pointer-events-auto">
             <AppLogo />
-            <h1 className="text-sm font-bold text-stone-800 tracking-wide">学案系统</h1>
+            <h1 className="text-sm font-bold text-stone-800 dark:text-stone-200 tracking-wide">学案系统</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 pointer-events-auto">
+            <ThemeToggle />
             <input
               type="file"
               id="importData"
@@ -284,13 +389,13 @@ export default function App() {
             />
             <button
               onClick={() => document.getElementById('importData')?.click()}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50 transition-colors cursor-pointer"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors cursor-pointer"
             >
               导入备份
             </button>
             <button
               onClick={handleExportData}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-stone-100 text-stone-700 hover:bg-stone-200 transition-colors cursor-pointer"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors cursor-pointer"
             >
               导出全库
             </button>
@@ -298,7 +403,7 @@ export default function App() {
         </div>
       </header>
       
-      <main className="flex-1 max-w-[1600px] w-full mx-auto p-0 sm:p-4 overflow-hidden flex">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto p-0 sm:p-4 overflow-hidden flex print:hidden">
         <DocWorkspace
           sheets={sheets}
           activeSheetId={activeSheetId}
@@ -327,6 +432,13 @@ export default function App() {
           onClose={() => setPrintSheet(null)}
         />
       )}
+      <GlobalCopilot
+        sheets={sheets}
+        folders={folders}
+        persistSheets={persistSheets}
+        persistFolders={persistFolders}
+        onDeleteFolder={handleDeleteFolder}
+      />
       {DialogComponent}
     </div>
   );
