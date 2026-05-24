@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { KnowledgeSheet, SubjectId, Folder } from './types';
 import { DEFAULT_SHEETS, SUBJECT_CONFIGS } from './subjectData';
 import { DocWorkspace } from './components/DocWorkspace';
@@ -44,6 +44,21 @@ export default function App() {
   const [activeSheetId, setActiveSheetId] = useState<string>('');
   const [printSheet, setPrintSheet] = useState<KnowledgeSheet | null>(null);
   
+  const [copilotState, setCopilotState] = useState<{
+    isActive: boolean;
+    isReviewing: boolean;
+    sheetId: string | null;
+    originalContent: string | null;
+    draftContent: string | null;
+    statusMsg: string | null;
+  }>({ isActive: false, isReviewing: false, sheetId: null, originalContent: null, draftContent: null, statusMsg: null });
+
+  const copilotStateRef = useRef(copilotState);
+  useEffect(() => {
+    copilotStateRef.current = copilotState;
+  }, [copilotState]);
+
+  
   const { DialogComponent, showAlert, showConfirm, showPrompt } = useDialog();
 
   // 从 localStorage 初始化或使用默认回退
@@ -76,7 +91,19 @@ export default function App() {
         localStorage.setItem('school_knowledge_sheets', JSON.stringify(loadedSheets));
       }
 
+      const storedCopilot = localStorage.getItem('school_knowledge_copilot_state');
+      if (storedCopilot) {
+        try {
+          const parsed = JSON.parse(storedCopilot);
+          // 仅恢复正处于编辑或审阅状态的信息
+          if (parsed.isActive || parsed.isReviewing) {
+            setCopilotState(parsed);
+          }
+        } catch(e) { console.error(e) }
+      }
+
       setFolders(loadedFolders);
+
       setSheets(loadedSheets);
       
       if (loadedSheets.length > 0) {
@@ -88,6 +115,10 @@ export default function App() {
       setSheets([]);
     }
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('school_knowledge_copilot_state', JSON.stringify(copilotState));
+  }, [copilotState]);
 
   const persistSheets = (updatedSheets: KnowledgeSheet[]) => {
     setSheets(updatedSheets);
@@ -423,6 +454,16 @@ ${sheet.content || ''}`;
           showAlert={showAlert}
           showConfirm={showConfirm}
           showPrompt={showPrompt}
+          copilotState={copilotState}
+          onCopilotReviewAction={(action) => {
+            if (action === 'accept' && copilotState.sheetId && copilotState.draftContent !== null) {
+              const currentSheet = sheets.find(s => s.id === copilotState.sheetId);
+              if (currentSheet) {
+                handleUpdateSheet({ ...currentSheet, content: copilotState.draftContent, updatedAt: new Date().toISOString() });
+              }
+            }
+            setCopilotState({ isActive: false, isReviewing: false, sheetId: null, originalContent: null, draftContent: null, statusMsg: null });
+          }}
         />
       </main>
 
@@ -432,13 +473,19 @@ ${sheet.content || ''}`;
           onClose={() => setPrintSheet(null)}
         />
       )}
-      <GlobalCopilot
-        sheets={sheets}
-        folders={folders}
-        persistSheets={persistSheets}
-        persistFolders={persistFolders}
-        onDeleteFolder={handleDeleteFolder}
-      />
+      <div className="print:hidden">
+        <GlobalCopilot
+          sheets={sheets}
+          folders={folders}
+          persistSheets={persistSheets}
+          persistFolders={persistFolders}
+          onDeleteFolder={handleDeleteFolder}
+          copilotState={copilotState}
+          getCopilotState={() => copilotStateRef.current}
+          setCopilotState={setCopilotState}
+          activeSheetId={activeSheetId}
+        />
+      </div>
       {DialogComponent}
     </div>
   );

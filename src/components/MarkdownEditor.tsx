@@ -5,9 +5,10 @@ interface MarkdownEditorProps {
   value: string;
   onChange: (val: string) => void;
   onSave?: () => void;
+  readOnly?: boolean;
 }
 
-export function MarkdownEditor({ value, onChange, onSave }: MarkdownEditorProps) {
+export function MarkdownEditor({ value, onChange, onSave, readOnly }: MarkdownEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   // Custom History for undo/redo
@@ -226,10 +227,11 @@ export function MarkdownEditor({ value, onChange, onSave }: MarkdownEditorProps)
 
       <textarea
         ref={textareaRef}
-        className="flex-1 w-full bg-transparent border-0 p-4 shadow-inner outline-none resize-none font-mono text-[13px] md:text-sm text-stone-800 dark:text-stone-200 leading-relaxed scrollbar-thin focus:ring-inset focus:ring-2 focus:ring-emerald-500/20 whitespace-pre-wrap"
+        className={`flex-1 w-full bg-transparent border-0 p-4 shadow-inner outline-none resize-none font-mono text-[13px] md:text-sm leading-relaxed scrollbar-thin whitespace-pre-wrap ${readOnly ? 'text-stone-500 cursor-not-allowed' : 'text-stone-800 dark:text-stone-200 focus:ring-inset focus:ring-2 focus:ring-emerald-500/20'}`}
         placeholder="在此输入 Markdown 格式的内容... 支持 LaTeX 公式 及 \ce{} 化学式排版"
         value={history[historyIndex]}
         onChange={handleChange}
+        readOnly={readOnly}
       />
     </div>
   );

@@ -18,7 +18,6 @@ export function PrintPreview({ sheet, onClose }: PrintPreviewProps) {
   const [columns, setColumns] = useState<'single'|'double'>('single');
   const [fontSize, setFontSize] = useState<'normal'|'large'>('normal');
   const [showTitle, setShowTitle] = useState(true);
-  const [showPageIndicator, setShowPageIndicator] = useState(true);
 
   const triggerPrint = () => {
     window.print();
@@ -74,15 +73,9 @@ export function PrintPreview({ sheet, onClose }: PrintPreviewProps) {
                 />
                 显示标题与描述
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={showPageIndicator} 
-                  onChange={e => setShowPageIndicator(e.target.checked)}
-                  className="rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-                />
-                显示辅助页脚与页码
-              </label>
+              <div className="text-xs text-stone-500 dark:text-stone-400 mt-2">
+                * 打印页码请在系统打印对话框中勾选"页眉和页脚"
+              </div>
             </div>
           </div>
         </div>
@@ -93,8 +86,8 @@ export function PrintPreview({ sheet, onClose }: PrintPreviewProps) {
       </div>
 
       {/* 预览区域 */}
-      <div className="flex-1 overflow-y-auto w-full flex justify-center p-4 md:p-8 shrink-0 print:!p-0 print:!block print:!overflow-visible text-black">
-        <div className="w-[210mm] min-h-[297mm] bg-white border border-stone-200 shadow-md p-[15mm] shrink-0 print:!w-auto print:!border-none print:!shadow-none print:!m-0 print:!p-[10mm] relative pb-16 print:pb-0">
+      <div className="flex-1 overflow-y-auto w-full flex justify-center items-start p-4 md:p-8 shrink-0 print:!p-0 print:!block print:!overflow-visible text-black" style={{ backgroundColor: 'transparent' }}>
+        <div className="w-[210mm] min-h-[297mm] h-fit bg-white shadow-md p-[15mm] md:p-[20mm] shrink-0 print:!w-auto print:!min-h-0 print:!bg-none print:!border-none print:!shadow-none print:!m-0 print:!p-0 relative">
           
           {showTitle && (
             <div className="border-b-2 border-stone-800 pb-4 mb-6 text-center">
@@ -134,12 +127,6 @@ export function PrintPreview({ sheet, onClose }: PrintPreviewProps) {
               {wrapChemistryVariables(sheet.content) || '*无内容*'}
             </Markdown>
           </div>
-          
-          {showPageIndicator && (
-            <div className="absolute bottom-4 right-8 text-xs text-stone-400 print:fixed print:bottom-[5mm] print:right-[10mm] print:text-[10px] print:text-black">
-              {sheet.title} · {new Date().toLocaleDateString()}
-            </div>
-          )}
         </div>
       </div>
       
